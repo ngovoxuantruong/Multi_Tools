@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm create:*)",
+      "Bash(node -e \"const p=require\\(''./node_modules/tailwindcss/package.json''\\); console.log\\(''Tailwind:'', p.version\\)\")",
+      "Bash(node -e \"const p=require\\(''./node_modules/postcss/package.json''\\); console.log\\(''PostCSS:'', p.version\\)\")",
+      "Bash(node -e \"const p=require\\(''./node_modules/lucide-react/package.json''\\); console.log\\(''Lucide:'', p.version\\)\")",
+      "Bash(pnpm install:*)",
+      "Bash(node -e \"console.log\\(JSON.stringify\\(require\\(''''./node_modules/eslint-config-next/package.json''''\\).peerDependencies, null, 2\\)\\)\")",
+      "Bash(pnpm build:*)"
+    ]
+  }
+}

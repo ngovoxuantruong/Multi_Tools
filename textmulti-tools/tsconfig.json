@@ -1,0 +1,9 @@
+{
+  "extends": "./apps/web/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": ".tsbuildinfo"
+  },
+  "include": ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
+  "exclude": ["node_modules"]
+}
