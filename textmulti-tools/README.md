@@ -29,22 +29,31 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ### Development
 
-Hot-reload dev server with bind mount — code changes are reflected immediately.
+Hot-reload dev server via Docker Compose — source changes on the host are
+reflected immediately without rebuilding the image.
 
 ```bash
 # Build image + start container (foreground)
 docker compose up --build
 
-# Run in background
+# Run in background, then tail logs
 docker compose up --build -d
+docker compose logs -f
 
 # Stop and remove containers
 docker compose down
 ```
 
+> **Note – named volume for `node_modules`:** The dev compose file uses a named
+> volume `node_modules:/app/node_modules` alongside the bind mount
+> `./apps/web:/app`.  Without the named volume, the bind mount would hide the
+> container's `/app/node_modules` (where pnpm installed the packages during the
+> image build), causing "module not found" errors on every import.  The named
+> volume preserves the installed packages independently of the bind mount.
+
 ### Production
 
-Multi-stage Docker build (node:20-alpine) → minimal standalone image.
+Multi-stage Docker build (`node:20-alpine`) → minimal standalone image (~150 MB).
 
 ```bash
 # Build image + start container (foreground)
@@ -60,8 +69,20 @@ docker compose -f docker-compose.prod.yml restart web
 docker compose -f docker-compose.prod.yml down
 ```
 
-The production container runs as non-root user, includes a `HEALTHCHECK` polling
-`http://localhost:3000/` every 10 s, and restarts automatically on crash or host reboot (`restart: unless-stopped`).
+The production container:
+- Runs as **non-root user** `nextjs` (uid 1001) for OS-level security.
+- Inherits a `HEALTHCHECK` from the Dockerfile: `wget http://localhost:3000/` every
+  10 s, marks unhealthy after 3 consecutive failures.
+- Restarts automatically on crash or host reboot (`restart: unless-stopped`).
+
+### Production Image Size Optimization
+
+| Technique | Impact |
+|---|---|
+| `node:20-alpine` base image | ~50 MB smaller than `node:20` slim |
+| 3-stage multi-stage build | Runner stage contains only runtime artifacts |
+| `--frozen-lockfile` dependency pinning | Deterministic layer caching, no extra installs |
+| `output: "standalone"` (Next.js) | Only compiled server + static assets in final image |
 
 ---
 
@@ -83,9 +104,9 @@ textmulti-tools/
 │   │   ├── ui/              # shadcn/ui components
 │   │   └── layout/          # Header, Sidebar, ThemeProvider, ThemeToggle
 │   ├── lib/                  # Utilities (cn helper, etc.)
-│   ├── Dockerfile            # Multi-stage production build
-│   └── .dockerignore         # Excludes dev artifacts from build context
-├── docker-compose.yml        # Development (bind mount, hot reload)
-├── docker-compose.prod.yml   # Production (standalone image, restart policy)
+│   ├── Dockerfile            # 3-stage production build (deps → builder → runner)
+│   └── .dockerignore         # Keeps pnpm-lock.yaml, skips dev artifacts
+├── docker-compose.yml        # Development (bind mount + named node_modules volume)
+├── docker-compose.prod.yml   # Production (standalone image, restart unless-stopped)
 └── pnpm-workspace.yaml       # Monorepo workspace config
 ```

@@ -1,12 +1,18 @@
 # ══════════════════════════════════════════════════════════════════════════════
 #  Docker Compose – Production
-#  Usage (from project root):
-#    Build & start:   docker compose -f docker-compose.prod.yml up --build
-#    Restart service: docker compose -f docker-compose.prod.yml restart web
-#    Stop (remove):  docker compose -f docker-compose.prod.yml down
 #
-#  Build args available:
-#    DOCKER_BUILD_NO_CACHE=1  – force full rebuild (no layer cache)
+#  Usage (from project root):
+#    Build & start:    docker compose -f docker-compose.prod.yml up --build
+#    Start (no rebuild): docker compose -f docker-compose.prod.yml up
+#    Restart:          docker compose -f docker-compose.prod.yml restart web
+#    Stop + remove:    docker compose -f docker-compose.prod.yml down
+#
+#  Notes:
+#    - HEALTHCHECK is inherited from the Dockerfile in apps/web/Dockerfile
+#      (wget http://localhost:3000/ every 10 s, 3 retries).  No explicit
+#      healthcheck block is needed here; Docker auto-detects it.
+#    - Container runs as non-root user `nextjs` (uid 1001) for security.
+#    - restart: unless-stopped survives host reboots and crash-restarts.
 # ══════════════════════════════════════════════════════════════════════════════
 version: "3.8"
 
@@ -21,9 +27,14 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
-    # Restart automatically on crash or host reboot.
-    # Use `docker compose -f docker-compose.prod.yml stop` to halt cleanly.
     restart: unless-stopped
-    # ── Health check (optional, Docker auto-detects the Dockerfile's HEALTHCHECK)
-    # The Dockerfile defines: wget http://localhost:3000/ every 10 s.
-    # `docker compose ps` will show (healthy) once the app responds.
+    # ── Health check (inherited from Dockerfile) ─────────────────────────────
+    # Docker automatically picks up the HEALTHCHECK instruction from the
+    # Dockerfile.  The explicit override below is optional but documents the
+    # expected behaviour for anyone reading this file.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: "10s"
+      timeout: "5s"
+      retries: 3
+      start_period: "10s"

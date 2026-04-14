@@ -20,9 +20,14 @@ WORKDIR /app
 # Copy package manifests first to maximise Docker layer-cache reuse.
 # `pnpm install` only re-runs when package.json or pnpm-lock.yaml changes.
 COPY package.json pnpm-lock.yaml* ./
+
+# --frozen-lockfile enforces three guarantees:
+#   1. Reproducible builds – exact same dependency tree on every build machine.
+#   2. Cache safety – Docker layer invalidates ONLY when lockfile changes.
+#   3. CI/CD integrity – prevents silent dependency drift during automated runs.
+# NOTE: do NOT use --production here. The builder stage runs TypeScript,
+#       ESLint, and next build, all of which require devDependencies.
 RUN pnpm install --frozen-lockfile
-# NOTE: do NOT use --production here. The builder stage needs devDependencies
-#       (TypeScript, ts-node, etc.) to compile the application.
 
 # ── Stage 2: build the application ───────────────────────────────────────────
 FROM node:20-alpine AS builder
@@ -54,9 +59,12 @@ RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid  1001 nextjs
 
 # Copy the standalone server bundle from the builder stage.
+# .next/standalone/ contains server.js and all server-side code needed at runtime.
+# Copying the *directory* (./) places server.js at /app/server.js, which matches
+# the CMD ["node", "server.js"] entrypoint below.
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 
-# Copy compiled static assets (JS bundles, images, fonts, etc.).
+# Copy compiled static assets (JS bundles, images, fonts, etc.) into .next/.
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static   ./.next/static
 
 # Copy the public/ directory if it exists (icons, static files).
