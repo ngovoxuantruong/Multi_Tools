@@ -1,0 +1,29 @@
+# ══════════════════════════════════════════════════════════════════════════════
+#  Docker Compose – Production
+#  Usage (from project root):
+#    Build & start:   docker compose -f docker-compose.prod.yml up --build
+#    Restart service: docker compose -f docker-compose.prod.yml restart web
+#    Stop (remove):  docker compose -f docker-compose.prod.yml down
+#
+#  Build args available:
+#    DOCKER_BUILD_NO_CACHE=1  – force full rebuild (no layer cache)
+# ══════════════════════════════════════════════════════════════════════════════
+version: "3.8"
+
+services:
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: multi-tools-prod
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+    # Restart automatically on crash or host reboot.
+    # Use `docker compose -f docker-compose.prod.yml stop` to halt cleanly.
+    restart: unless-stopped
+    # ── Health check (optional, Docker auto-detects the Dockerfile's HEALTHCHECK)
+    # The Dockerfile defines: wget http://localhost:3000/ every 10 s.
+    # `docker compose ps` will show (healthy) once the app responds.

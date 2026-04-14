@@ -1,0 +1,35 @@
+# ─── Dependencies ────────────────────────────────────────────────
+# node_modules is NOT sent to the build context – installed in stage 1
+# via `pnpm install`.  Keeping pnpm-lock.yaml is REQUIRED:
+#   1. `--frozen-lockfile` in the Dockerfile requires it for reproducible builds.
+#   2. CI/CD pipelines need it for deterministic dependency resolution.
+node_modules
+# pnpm-lock.yaml intentionally kept – see note above.
+
+# ─── Next.js build artifacts ─────────────────────────────────────
+.next
+out
+
+# ─── Version control ─────────────────────────────────────────────
+.git
+.gitignore
+
+# ─── Development / editor files ───────────────────────────────────
+*.md
+*.log
+.npmrc
+.eslintrc*
+.prettierrc*
+.env
+.env.*
+!.env.example
+
+# ─── Testing / CI ─────────────────────────────────────────────────
+coverage
+.nyc_output
+Dockerfile
+docker-compose*.yml
+
+# ─── OS clutter ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

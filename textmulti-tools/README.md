@@ -10,20 +10,60 @@ A collection of useful web tools built with Next.js 15, TypeScript, and shadcn/u
 - **Styling:** Tailwind CSS
 - **UI Components:** shadcn/ui
 - **Icons:** Lucide React
-- **Theme:** next-themes
+- **Theme:** next-themes (dark mode via `class` strategy)
 
-## Getting Started
+---
+
+## Running Locally (without Docker)
 
 ```bash
-# Install dependencies
 cd apps/web
 pnpm install
-
-# Run development server
 pnpm dev
 ```
+Open [http://localhost:3000](http://localhost:3000).
 
-Open [http://localhost:3000](http://localhost:3000) to start using the tools.
+---
+
+## Docker Deployment
+
+### Development
+
+Hot-reload dev server with bind mount — code changes are reflected immediately.
+
+```bash
+# Build image + start container (foreground)
+docker compose up --build
+
+# Run in background
+docker compose up --build -d
+
+# Stop and remove containers
+docker compose down
+```
+
+### Production
+
+Multi-stage Docker build (node:20-alpine) → minimal standalone image.
+
+```bash
+# Build image + start container (foreground)
+docker compose -f docker-compose.prod.yml up --build
+
+# Run in background
+docker compose -f docker-compose.prod.yml up --build -d
+
+# Restart running container
+docker compose -f docker-compose.prod.yml restart web
+
+# Stop and remove containers
+docker compose -f docker-compose.prod.yml down
+```
+
+The production container runs as non-root user, includes a `HEALTHCHECK` polling
+`http://localhost:3000/` every 10 s, and restarts automatically on crash or host reboot (`restart: unless-stopped`).
+
+---
 
 ## Available Tools
 
@@ -41,8 +81,11 @@ textmulti-tools/
 │   ├── app/                  # Next.js App Router
 │   ├── components/           # React components
 │   │   ├── ui/              # shadcn/ui components
-│   │   ├── layout/          # Layout components
-│   │   └── common/          # Shared components
-│   └── lib/                 # Utilities
-└── docker-compose.yml       # Docker deployment
+│   │   └── layout/          # Header, Sidebar, ThemeProvider, ThemeToggle
+│   ├── lib/                  # Utilities (cn helper, etc.)
+│   ├── Dockerfile            # Multi-stage production build
+│   └── .dockerignore         # Excludes dev artifacts from build context
+├── docker-compose.yml        # Development (bind mount, hot reload)
+├── docker-compose.prod.yml   # Production (standalone image, restart policy)
+└── pnpm-workspace.yaml       # Monorepo workspace config
 ```

@@ -1,12 +1,38 @@
+# ══════════════════════════════════════════════════════════════════════════════
+#  Docker Compose – Development
+#
+#  Hot-reload dev: source changes on the host are reflected immediately.
+#  Named volume for node_modules prevents the bind mount from overwriting
+#  the container's installed packages.
+#
+#  Usage (from project root):
+#    Start:   docker compose up --build
+#    Stop:    docker compose down
+#    Logs:    docker compose logs -f
+# ══════════════════════════════════════════════════════════════════════════════
 version: "3.8"
 
 services:
   web:
     build:
-      context: ./apps/web
+      context: ./apps/web          # build context = apps/web directory
       dockerfile: Dockerfile
+    container_name: multi-tools-dev
     ports:
-      - "3000:3000"
+      - "3000:3000"               # host:container
     environment:
-      - NODE_ENV=production
-    restart: unless-stopped
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+    volumes:
+      # Bind mount: host source → container /app (read-write).
+      # Changes to *.tsx, *.ts, CSS are picked up by Next.js HMR instantly.
+      - ./apps/web:/app
+      # Named volume: preserve container's node_modules inside the image.
+      # Without this, the bind mount would hide /app/node_modules and all
+      # installed packages would disappear, causing "module not found" errors.
+      - node_modules:/app/node_modules
+    restart: "no"                 # dev: do not restart on exit
+
+# Named volume lives outside the bind mount, survives container removal.
+volumes:
+  node_modules:
