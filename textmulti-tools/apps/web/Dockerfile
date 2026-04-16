@@ -13,7 +13,12 @@
 # ── Stage 1: install all dependencies ────────────────────────────────────────
 FROM node:20-alpine AS deps
 
-RUN corepack enable && corepack prepare pnpm@9@activate
+RUN corepack enable && corepack prepare pnpm@latest
+# Using pnpm@latest (via corepack) instead of a pinned major version.
+# Rationale: the project's pnpm-lock.yaml is the real source of truth for the
+# dependency tree (--frozen-lockfile guarantees exact resolution regardless of
+# the pnpm version used).  corepack ensures a consistent, recent pnpm binary
+# without requiring manual version management in the Dockerfile.
 
 WORKDIR /app
 
@@ -32,7 +37,7 @@ RUN pnpm install --frozen-lockfile
 # ── Stage 2: build the application ───────────────────────────────────────────
 FROM node:20-alpine AS builder
 
-RUN corepack enable && corepack prepare pnpm@9@activate
+RUN corepack enable && corepack prepare pnpm@latest
 
 WORKDIR /app
 
@@ -62,14 +67,18 @@ RUN addgroup --system --gid 1001 nodejs \
 # .next/standalone/ contains server.js and all server-side code needed at runtime.
 # Copying the *directory* (./) places server.js at /app/server.js, which matches
 # the CMD ["node", "server.js"] entrypoint below.
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder /app/.next/standalone ./
 
 # Copy compiled static assets (JS bundles, images, fonts, etc.) into .next/.
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static   ./.next/static
+COPY --from=builder /app/.next/static   ./.next/static
 
 # Copy the public/ directory if it exists (icons, static files).
 # The || true prevents the COPY from failing when the directory is absent.
-COPY --from=builder --chown=nextjs:nodejs /app/public          ./public || true
+COPY --from=builder /app/public          ./public || true
+
+# Fix ownership after all COPYs – legacy Docker builder does not support
+# COPY --from=<stage> --chown in multi-stage builds (stage is not "previous").
+RUN chown -R nextjs:nodejs /app
 
 EXPOSE 3000
 

@@ -9,8 +9,8 @@
 #
 #  Notes:
 #    - HEALTHCHECK is inherited from the Dockerfile in apps/web/Dockerfile
-#      (wget http://localhost:3000/ every 10 s, 3 retries).  No explicit
-#      healthcheck block is needed here; Docker auto-detects it.
+#      (wget http://localhost:3000/ every 10 s, 3 retries).  Docker
+#      auto-detects and applies it; no explicit healthcheck block is needed.
 #    - Container runs as non-root user `nextjs` (uid 1001) for security.
 #    - restart: unless-stopped survives host reboots and crash-restarts.
 # ══════════════════════════════════════════════════════════════════════════════
@@ -28,13 +28,3 @@ services:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
     restart: unless-stopped
-    # ── Health check (inherited from Dockerfile) ─────────────────────────────
-    # Docker automatically picks up the HEALTHCHECK instruction from the
-    # Dockerfile.  The explicit override below is optional but documents the
-    # expected behaviour for anyone reading this file.
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
-      interval: "10s"
-      timeout: "5s"
-      retries: 3
-      start_period: "10s"

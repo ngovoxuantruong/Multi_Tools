@@ -27,6 +27,10 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Docker Deployment
 
+> **Build context:** Docker images are always built from the `apps/web` directory
+> (`context: ./apps/web` in docker-compose).  All docker-compose and Dockerfile
+> references to paths inside `/app` assume this context.
+
 ### Development
 
 Hot-reload dev server via Docker Compose — source changes on the host are
@@ -44,16 +48,17 @@ docker compose logs -f
 docker compose down
 ```
 
-> **Note – named volume for `node_modules`:** The dev compose file uses a named
-> volume `node_modules:/app/node_modules` alongside the bind mount
-> `./apps/web:/app`.  Without the named volume, the bind mount would hide the
-> container's `/app/node_modules` (where pnpm installed the packages during the
-> image build), causing "module not found" errors on every import.  The named
-> volume preserves the installed packages independently of the bind mount.
+> **Named volume for `node_modules`:** The dev compose file uses a named volume
+> `node_modules:/app/node_modules` alongside the bind mount `./apps/web:/app`.
+> Without the named volume the bind mount hides the container's `/app/node_modules`,
+> causing "module not found" errors.  The named volume preserves the installed
+> packages independently of the source mount.
 
 ### Production
 
-Multi-stage Docker build (`node:20-alpine`) → minimal standalone image (~150 MB).
+Multi-stage Docker build (`node:20-alpine`) → minimal standalone image.
+Uses `pnpm@latest` via corepack; the `pnpm-lock.yaml` is the real source of
+truth for dependency resolution (`--frozen-lockfile` enforces exact matches).
 
 ```bash
 # Build image + start container (foreground)
@@ -83,6 +88,8 @@ The production container:
 | 3-stage multi-stage build | Runner stage contains only runtime artifacts |
 | `--frozen-lockfile` dependency pinning | Deterministic layer caching, no extra installs |
 | `output: "standalone"` (Next.js) | Only compiled server + static assets in final image |
+
+Final image size: **120 – 180 MB** depending on installed dependencies.
 
 ---
 

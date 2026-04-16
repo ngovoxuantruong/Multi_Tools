@@ -8,7 +8,22 @@
       "Bash(pnpm install:*)",
       "Bash(node -e \"console.log\\(JSON.stringify\\(require\\(''''./node_modules/eslint-config-next/package.json''''\\).peerDependencies, null, 2\\)\\)\")",
       "Bash(pnpm build:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker --version)",
+      "Bash(docker-compose --version)",
+      "Bash(docker-compose up:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm --version)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker build:*)",
+      "Bash(docker system:*)",
+      "Bash(docker create:*)",
+      "Bash(docker cp:*)",
+      "Read(//tmp/**)",
+      "Bash(docker rm:*)",
+      "Bash(docker run:*)",
+      "Bash(2)"
     ]
   }
 }
