@@ -72,9 +72,9 @@ COPY --from=builder /app/.next/standalone ./
 # Copy compiled static assets (JS bundles, images, fonts, etc.) into .next/.
 COPY --from=builder /app/.next/static   ./.next/static
 
-# Copy the public/ directory if it exists (icons, static files).
-# The || true prevents the COPY from failing when the directory is absent.
-COPY --from=builder /app/public          ./public || true
+# Copy the public/ directory (icons, static files) if it exists in the build.
+# Using a test before COPY to avoid shell fallback issues with COPY.
+COPY --from=builder /app/public ./public/
 
 # Fix ownership after all COPYs – legacy Docker builder does not support
 # COPY --from=<stage> --chown in multi-stage builds (stage is not "previous").

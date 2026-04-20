@@ -1,0 +1,23 @@
+# ══════════════════════════════════════════════════════════════════════════════
+#  Multi-Tools – Development Dockerfile
+#  Next.js 15 · hot-reload dev server
+# ══════════════════════════════════════════════════════════════════════════════
+
+FROM node:20-alpine
+
+RUN corepack enable && corepack prepare pnpm@latest
+
+WORKDIR /app
+
+# Install dependencies.
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --frozen-lockfile
+
+# Copy source files (volume mount will overwrite these for hot-reload).
+COPY . .
+
+# Expose the dev server port.
+EXPOSE 3000
+
+# Start Next.js dev server with hot-reload.
+CMD ["pnpm", "dev", "-H", "0.0.0.0"]
