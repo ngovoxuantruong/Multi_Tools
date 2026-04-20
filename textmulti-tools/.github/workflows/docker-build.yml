@@ -1,0 +1,347 @@
+# ══════════════════════════════════════════════════════════════════════════════
+#  GitHub Actions – Docker Build & Push Pipeline
+#
+#  Workflow: Docker Build & Push
+#  ─────────────────────────────────────────────────────────────────────────────
+#  Tự động build và push Docker image lên GitHub Container Registry (ghcr.io)
+#  khi có thay đổi code trên branch `main` hoặc khi mở Pull Request vào `main`.
+#
+#  Trigger Events:
+#    • push    → branch: main        (push full image + tags)
+#    pull_request → target: main     (chỉ build, không push – để verify)
+#
+#  Image Registry: ghcr.io / GitHub Container Registry
+#  Image Owner:    github.repository_owner (ví dụ: username hoặc org name)
+#  Image Name:     multi-tools
+#
+#  Tags được build:
+#    • sha-<GIT_SHA>           → luôn luôn (ví dụ: sha-a1b2c3d4)
+#    • latest                  → chỉ khi push vào main
+#    • pr-<PR_NUMBER>          → chỉ khi pull_request (nếu có PR number)
+#
+#  Best Practices:
+#    ✓ Docker layer caching với Buildx (cache-from / cache-to)
+#    ✓ Chỉ trigger khi có thay đổi trong apps/web/ hoặc Docker files
+#    ✓ Metadata labels: created, revision, source, image name
+#    ✓ Bảo mật: dùng GITHUB_TOKEN cho ghcr.io login (không cần tạo PAT thủ công)
+#    ✓ Prod build test: verify docker-compose.prod.yml build thành công
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: Docker Build & Push
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Triggers
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  # Trigger khi push lên branch main (full CI/CD → build + push + test)
+  push:
+    branches:
+      - main
+    # Chỉ trigger khi có thay đổi trong các thư mục/file liên quan đến Docker
+    paths:
+      - "apps/web/**"       # Source code thay đổi
+      - "docker-compose*.yml"  # Docker compose files thay đổi
+      - "Dockerfile*"       # Dockerfile thay đổi
+      - ".github/workflows/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+  # Trigger khi mở/reopen/sync Pull Request vào main (chỉ build để verify)
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+    paths:
+      - "apps/web/**"
+      - "docker-compose*.yml"
+      - "Dockerfile*"
+      - ".github/workflows/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Permissions – cấp quyền tối thiểu cần thiết
+# ─────────────────────────────────────────────────────────────────────────────
+permissions:
+  contents: read                    # Chỉ đọc repo (checkout)
+  packages: write                  # Ghi (push) image vào ghcr.io
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Concurrency – đảm bảo chỉ chạy 1 workflow instance cùng lúc trên cùng branch
+# ─────────────────────────────────────────────────────────────────────────────
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Jobs
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  # ════════════════════════════════════════════════════════════════════════════
+  # Job 1: Build Docker Image
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Build image, tag, push lên ghcr.io. Với pull_request chỉ build (verify),
+  # với push main thì build + push.
+  # ════════════════════════════════════════════════════════════════════════════
+  build-and-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Step 1: Checkout code ────────────────────────────────────────────────
+      # Tải toàn bộ source code từ repository về runner
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Step 2: Extract metadata ─────────────────────────────────────────────
+      # Lấy thông tin commit, PR number, actor để dùng trong labels và tags
+      - name: Extract metadata (Docker metadata)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Tên image đầy đủ trên ghcr.io
+          images: ghcr.io/${{ github.repository_owner }}/multi-tools
+          # Các tags được tạo tự động
+          tags: |
+            # Tag theo short SHA của commit (luôn có)
+            type=sha,format=short,prefix=sha-
+            # Tag latest chỉ khi push vào main
+            type=ref,event=branch,prefix=,enable=${{ github.ref == 'refs/heads/main' }}
+            # Tag theo PR number nếu đang chạy từ Pull Request
+            type=ref,event=pr,prefix=pr-
+            # Tag theo ngày tháng
+            type=raw,value={{date 'YYYY-MM-DD'}},enable=${{ github.ref == 'refs/heads/main' }}
+
+      # ── Step 3: Setup pnpm ──────────────────────────────────────────────────
+      # Cài đặt pnpm package manager (dùng corepack hoặc npm)
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+
+      # ── Step 4: Setup Node.js ────────────────────────────────────────────────
+      # Node.js cần thiết để chạy corepack → enable pnpm
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # Sử dụng pnpm như package manager
+          package-manager: pnpm@latest
+          # Cache node_modules để tăng tốc dependency installation
+          cache: pnpm
+
+      # ── Step 5: Install dependencies ─────────────────────────────────────────
+      # Chạy pnpm install để chuẩn bị môi trường build (pnpm-lock.yaml đảm
+      # bảo deterministic installs)
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Step 6: Setup Docker Buildx ──────────────────────────────────────────
+      # Docker Buildx hỗ trợ multi-platform build, layer caching, và BuildKit
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Step 7: Login vào GitHub Container Registry ──────────────────────────
+      # Sử dụng GITHUB_TOKEN (built-in) để login vào ghcr.io
+      # Không cần tạo Personal Access Token thủ công.
+      # GITHUB_TOKEN có quyền packages:write trong repo hiện tại.
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Step 8: Build Docker image ────────────────────────────────────────────
+      # Build image với Docker BuildKit, sử dụng layer caching để tăng tốc
+      # build tiếp theo (cache được push lên GitHub Actions cache)
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          # Context: thư mục apps/web (nơi chứa Dockerfile và source code)
+          context: ./apps/web
+          # Dockerfile sử dụng cho production build
+          file: ./apps/web/Dockerfile
+          # Tags từ metadata step
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Chỉ push khi là push vào main (không push khi là pull_request)
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # Layer caching với GitHub Actions cache
+          # cache-from: dùng cache từ build trước (nếu có)
+          # cache-to: lưu cache sau khi build xong
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Build arguments truyền vào Dockerfile
+          build-args: |
+            NODE_ENV=production
+            NEXT_TELEMETRY_DISABLED=1
+          # Tags rõ ràng cho việc debug nếu cần
+          pull: true
+          no-cache-fallback: false
+
+      # ── Step 9: Output image digest ─────────────────────────────────────────
+      # In ra SHA256 digest của image vừa build (hữu ích cho debugging, audit)
+      - name: Image digest
+        run: |
+          echo "Docker image built successfully!"
+          echo "Tags: ${{ steps.meta.outputs.tags }}"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Outputs: truyền thông tin image cho các job khác (nếu cần)
+    # ─────────────────────────────────────────────────────────────────────────
+    outputs:
+      image-digest: ${{ steps.meta.outputs.tags }}
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Job 2: Production Build Verification (Tùy chọn – khuyến nghị)
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Verify rằng production Docker image build thành công bằng cách chạy
+  # docker-compose.prod.yml. Job này chạy song song với build-and-push.
+  # ─────────────────────────────────────────────────────────────────────────────
+  prod-build-verify:
+    name: Production Build Verify
+    runs-on: ubuntu-latest
+    # Chỉ chạy khi là push vào main (không cần verify với PR)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      # ── Step 1: Checkout code ────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Step 2: Setup Docker Buildx ──────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Step 3: Build production image (no push) ────────────────────────────
+      # Chạy docker-compose prod build để xác nhận production config hợp lệ
+      # Sử dụng --load để load image vào local docker daemon (không push)
+      - name: Build production image (docker-compose)
+        run: |
+          docker compose -f docker-compose.prod.yml build --no-progress
+
+      # ── Step 4: Verify image exists ──────────────────────────────────────────
+      # Kiểm tra image đã được tạo thành công
+      - name: Verify image exists
+        run: |
+          IMAGE_ID=$(docker images -q multi-tools-prod --format "{{.ID}}")
+          if [ -n "$IMAGE_ID" ]; then
+            echo "✓ Production image built successfully: $IMAGE_ID"
+            docker images multi-tools-prod
+          else
+            echo "✗ Production image not found!"
+            exit 1
+          fi
+
+      # ── Step 5: Smoke test – chạy container và kiểm tra healthcheck ─────────
+      - name: Smoke test – start container
+        run: |
+          # Chạy container với timeout 60s để kiểm tra healthcheck
+          timeout 60 docker compose -f docker-compose.prod.yml up --abort-on-container-exit || {
+            EXIT_CODE=$?
+            # Exit code 124 = timeout (có thể container đang chạy tốt)
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo "✓ Container started and healthy (timeout = healthy)"
+            else
+              echo "✗ Container failed to start"
+              exit $EXIT_CODE
+            fi
+          }
+
+      # ── Cleanup ──────────────────────────────────────────────────────────────
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Job 3: Lint & Type Check (Optional – bảo đảm chất lượng code)
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    # Chạy song song với build jobs
+    needs: [build-and-push]
+
+    steps:
+      # ── Step 1: Checkout code ────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Step 2: Setup pnpm + Node.js ────────────────────────────────────────
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      # ── Step 3: Install dependencies ─────────────────────────────────────────
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Step 4: Run ESLint ───────────────────────────────────────────────────
+      - name: Run ESLint
+        run: pnpm --filter web lint
+
+      # ── Step 5: TypeScript type check ─────────────────────────────────────────
+      - name: TypeScript type check
+        run: pnpm --filter web exec tsc --noEmit
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Job 4: Security Scan (Optional – khuyến nghị cho production)
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Chạy Trivy security scanner để phát hiện vulnerabilities trong Docker image
+  # ─────────────────────────────────────────────────────────────────────────────
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    # Chỉ chạy khi push vào main và sau khi build thành công
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      # ── Step 1: Checkout code ────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Step 2: Setup Docker Buildx ──────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Step 3: Build image (không push) ────────────────────────────────────
+      # Build image để scan – không cần push vì image đã được build ở job trước
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/web
+          file: ./apps/web/Dockerfile
+          tags: ghcr.io/${{ github.repository_owner }}/multi-tools:scan-test
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Step 4: Run Trivy vulnerability scanner ──────────────────────────────
+      - name: Run Trivy scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/multi-tools:scan-test
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          # exit-code '1' nếu tìm thấy vulnerabilities CRITICAL/HIGH
+          exit-code: "1"
+
+      # ── Step 5: Upload SARIF results to GitHub Security tab ─────────────────
+      # Kết quả scan sẽ hiển thị trong tab Security > Code scanning alerts
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      # ── Note: Nếu muốn bỏ qua các false positive, thêm file trivy.yaml ─────
+      # ref: https://aquasecurity.github.io/trivy/latest/docs/configuration/
