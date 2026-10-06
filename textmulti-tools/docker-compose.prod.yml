@@ -1,0 +1,33 @@
+# ============================================================
+# Docker Compose — Production
+# ============================================================
+# Usage:
+#   Build & Start:  docker compose -f docker-compose.prod.yml up --build
+#   Stop:          docker compose -f docker-compose.prod.yml down
+#   Rebuild:       docker compose -f docker-compose.prod.yml up --build --force-recreate
+#
+# Uses pre-built image from Dockerfile (multi-stage, ~minimal size).
+# Automatically restarts on failure.
+# ============================================================
+
+version: "3.8"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runner        # Use minimal runner stage
+    image: multi-tools:prod
+    container_name: multi-tools-prod
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped  # Auto-restart unless explicitly stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

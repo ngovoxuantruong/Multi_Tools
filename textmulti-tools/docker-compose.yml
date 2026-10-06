@@ -1,12 +1,33 @@
+# ============================================================
+# Docker Compose — Development
+# ============================================================
+# Usage:
+#   Development:  docker compose up --build
+#   Stop:        docker compose down
+#   Rebuild:     docker compose up --build --force-recreate
+#
+# Hot reload is enabled via bind mount (./apps/web:/app).
+# Any code change on the host is reflected immediately.
+# ============================================================
+
 version: "3.8"
 
 services:
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: builder      # Use builder stage for dev (has dev tooling)
+    # Bind mount: host ./apps/web maps to container /app
+    # Changes on host are reflected immediately (hot reload)
+    volumes:
+      - ./apps/web:/app
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-    restart: unless-stopped
+      - NODE_ENV=development
+    # Run dev server (watches for file changes)
+    command: pnpm dev --turbopack
+    restart: "no"          # Don't auto-restart in dev
+    stdin_open: true        # Keep STDIN open (needed for dev)
+    tty: true               # Allocate a TTY (needed for dev)

@@ -1,0 +1,51 @@
+# Dependencies — huge, cached separately
+node_modules
+.pnpm-store
+
+# Source code — not needed inside the final image
+**/*.tsx
+**/*.ts
+**/*.jsx
+**/*.js
+!**/*.config.*
+
+# Next.js build artifacts — regenerated during build stage
+.next
+out
+
+# Development & IDE files
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.vscode
+.idea
+*.md
+README.md
+CHANGELOG.md
+
+# Test & CI files
+Dockerfile
+docker-compose*.yml
+.dockerignore
+.docker
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+coverage
+.nyc_output
+.gitlab-ci.yml
+.github
+.github/workflows
+
+# Misc
+.cache
+tmp
+temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
